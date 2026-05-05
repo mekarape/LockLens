@@ -54,7 +54,7 @@ def track(self, result):
 # rotate toward last known target 
 # rotates then returns to let main loop recheck for target 
 def search(self):
-    # searching_audio()
+    play_searching()
     if self.last_cx >= 0.5:
         left_rpm = int(self.base_speed * self.max_rpm * self.left_multiplier)
         right_rpm = int(-self.base_speed * self.max_rpm * self.right_multiplier)
