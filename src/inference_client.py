@@ -3,7 +3,11 @@ import base64
 import json
 import requests
 
-AMD_ENDPOINT = "http://YOUR_IP_ADDRESS:8000/v1/chat/completions"
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+AMD_ENDPOINT = os.getenv("AMD_ENDPOINT")
 
 # takes image file + target string
 # returns a dictionary ready to send 
