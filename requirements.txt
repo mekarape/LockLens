@@ -1,0 +1,9 @@
+picamera2
+pyserial
+pyvesc
+pygame
+websockets
+python-dotenv
+requests
+
+
