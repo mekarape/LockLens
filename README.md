@@ -207,7 +207,7 @@ Target customers: robotics startups, university labs, warehouse automation teams
 
 ## Roadmap
 
-- VL53L0X ToF sensor integration for collision avoidance (hardware already on platform)
+- VL53L0X ToF sensor integration for collision avoidance 
 - Multi-camera support
 - Edge inference mode for low-latency offline operation
 - REST API for third-party robot integration
