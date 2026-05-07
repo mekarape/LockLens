@@ -11,8 +11,8 @@ import threading
 
 # initialize hardware and shared state
 camera = Picamera2()
+camera.configure(camera.create_preview_configuration())
 camera.start()
-motors = Motors()
 
 # shared state between main loop and websocket handler
 # target is plain english description of what to follow

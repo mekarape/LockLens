@@ -18,7 +18,7 @@ LockLens replaces all of that with open-vocabulary AI vision running on AMD hard
 
 LockLens is a pay-per-inference AI vision platform that enables any Linux-based robot to follow a target specified in plain English. A user types "follow the person wearing a blue jacket" on a touchscreen and the system locks on, follows in real time, and carries your belongings with it. No physical markers required.
 
-The reference implementation runs on a custom hoverboard conversion platform with 8.5 inch hub motors, Flipsky VESC motor controllers, and a Raspberry Pi 5. The same software stack is designed to deploy on any Linux device with a camera and a serial port.
+The reference implementation runs on a custom hoverboard conversion platform with 8.5 inch hub motors, Flipsky VESC motor controllers, and a Raspberry Pi 4B. The same software stack is designed to deploy on any Linux device with a camera and a serial port.
 
 ---
 
@@ -40,12 +40,12 @@ The reference implementation runs on a custom hoverboard conversion platform wit
 ### Motor Control
 - 2x Flipsky VESC motor controllers
 - Master/slave configuration over CAN bus
-- UART communication from Raspberry Pi 5 to master VESC
+- UART communication from Raspberry Pi 4B to master VESC
 - CAN bus forwards commands from master to slave automatically
 - Custom power distribution block tapping 36V battery
 
 ### Computing and Sensing
-- Raspberry Pi 5 (main compute)
+- Raspberry Pi 4B (main compute)
 - Raspberry Pi Camera Module 3, 12MP IMX708, autofocus, CSI ribbon cable
 - 500mm shielded 22-to-15 pin FFC cable for signal integrity near motor EMI
 - 5 inch DSI touchscreen for live dashboard
@@ -85,7 +85,7 @@ The reference implementation runs on a custom hoverboard conversion platform wit
 ## How It Works
 
 ```
-CSI Camera (Raspberry Pi 5)
+CSI Camera (Raspberry Pi 4B)
         | JPEG frame captured every cycle
 inference_client.py
         | base64 encoded frame + plain English target prompt
