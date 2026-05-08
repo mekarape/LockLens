@@ -14,11 +14,11 @@ class Motors:
         baud=115200,
         slave_can_id=88,
         max_rpm=4000,
-        left_multiplier=1,
-        right_multiplier=-1,
+        left_multiplier=-1,
+        right_multiplier=1,
         kp=0.4,
-        base_speed=0.45,
-        search_speed=0.2,
+        base_speed=0.35,
+        search_speed=0.15,
     ):
         self.port = port
         self.baud = baud
