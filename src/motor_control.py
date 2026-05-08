@@ -93,3 +93,9 @@ class Motors:
             time.sleep(0.05)
         finally:
             self.ser.close()
+    def set_speed(self, left_speed, right_speed):
+        # set motor speeds directly in range -1.0 to 1.0
+        left_rpm = int(left_speed * self.max_rpm * self.left_multiplier)
+        right_rpm = int(right_speed * self.max_rpm * self.right_multiplier)
+        self._send(SetRPM(left_rpm))
+        self._send(SetRPM(right_rpm, can_id=self.slave_can_id))
