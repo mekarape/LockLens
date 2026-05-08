@@ -49,8 +49,15 @@ def send_request(data):
 # extracts cx, cy, found, confidence
 # returns clean dictionary the motor controller can use
 def parse_response(response):
+    # unpack the vLLM response wrapper to get Qwen's actual answer
     content = response.json()["choices"][0]["message"]["content"]
-    results = json.loads(content)
+    # handle empty or invalid response from model
+    if not content or not content.strip():
+        return {"found": False}
+    try:
+        results = json.loads(content)
+    except json.JSONDecodeError:
+        return {"found": False}
     return results
 
 def get_target_location(image_path, target):
