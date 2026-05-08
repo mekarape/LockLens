@@ -13,14 +13,12 @@ class Motors:
         port="/dev/ttyAMA0",
         baud=115200,
         slave_can_id=88,
-        max_rpm=3000,
+        max_rpm=4000,
         left_multiplier=1,
         right_multiplier=-1,
         kp=0.4,
-        base_speed=0.28,
+        base_speed=0.45,
         search_speed=0.2,
-        kickstart_rpm=1800,
-        kickstart_duration=0.1,
     ):
         self.port = port
         self.baud = baud
@@ -31,20 +29,16 @@ class Motors:
         self.kp = kp
         self.base_speed = base_speed
         self.search_speed = search_speed
-        self.kickstart_rpm = kickstart_rpm
-        self.kickstart_duration = kickstart_duration
         self.ser = serial.Serial(self.port, self.baud, timeout=0.1)
         self.last_cx = 0.18
-        self.was_stopped = True  # track if motors were stopped last cycle
 
     # proportional control converts target position to motor speeds
     # error > 0 --> target is right of center, correction turns wagon right
     # error < 0 --> target is left of center, correction turns wagon left
     def track(self, result):
         print(f"track called: found={result.get('found')}, confidence={result.get('confidence', 0):.2f}, cx={result.get('cx', 'N/A')}")
-        
+
         if not result["found"]:
-            self.was_stopped = True
             self.search()
             return
 
@@ -60,26 +54,11 @@ class Motors:
         # maintain ~2 foot standoff using bbox height as distance proxy
         bh = result.get("h", 0)
         if bh > 0.6:
-            base_speed = 0
-            self.was_stopped = True
-        else:
-            base_speed = self.base_speed
-
-        if base_speed == 0:
             self.stop()
             return
 
-        # kickstart — brief high torque pulse if motors were stopped
-        if self.was_stopped and base_speed > 0:
-            left_kick = int(self.kickstart_rpm * self.left_multiplier)
-            right_kick = int(self.kickstart_rpm * self.right_multiplier)
-            self._send(SetRPM(left_kick))
-            self._send(SetRPM(right_kick, can_id=self.slave_can_id))
-            time.sleep(self.kickstart_duration)
-            self.was_stopped = False
-
-        left_speed = base_speed + correction
-        right_speed = base_speed - correction
+        left_speed = self.base_speed + correction
+        right_speed = self.base_speed - correction
         left_rpm = int(left_speed * self.max_rpm * self.left_multiplier)
         right_rpm = int(right_speed * self.max_rpm * self.right_multiplier)
         self._send(SetRPM(left_rpm))
