@@ -16,7 +16,7 @@ class Motors:
         max_rpm=4000,
         left_multiplier=-1,
         right_multiplier=1,
-        kp=0.15,
+        kp=0.08,
         base_speed=0.35,
         search_speed=0.15,
     ):
@@ -31,6 +31,8 @@ class Motors:
         self.search_speed = search_speed
         self.ser = serial.Serial(self.port, self.baud, timeout=0.1)
         self.last_cx = 0.18
+        self.cx_history = []
+        self.cx_history_size = 6
 
     # proportional control converts target position to motor speeds
     # error > 0 --> target is right of center, correction turns wagon right
@@ -39,15 +41,23 @@ class Motors:
         print(f"track called: found={result.get('found')}, confidence={result.get('confidence', 0):.2f}, cx={result.get('cx', 'N/A')}")
 
         if not result["found"]:
+            self.cx_history.clear()
             self.search()
             return
 
         cx = result["cx"]
         self.last_cx = cx
+
+        # rolling average over last 6 frames to smooth noisy cx values
+        self.cx_history.append(cx)
+        if len(self.cx_history) > self.cx_history_size:
+            self.cx_history.pop(0)
+        smooth_cx = sum(self.cx_history) / len(self.cx_history)
+
         # camera offset calibrated to 0.18
-        error = cx - 0.18
-        # deadband — ignore small errors to reduce jitter
-        if abs(error) < 0.2:
+        error = smooth_cx - 0.18
+        # wide deadband — only correct if consistently off center
+        if abs(error) < 0.25:
             error = 0
         correction = error * self.kp
 

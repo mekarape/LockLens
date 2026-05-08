@@ -10,8 +10,7 @@ searching_sound = pygame.mixer.Sound(os.path.join(SOUNDS_DIR, "searching.wav"))
 locked_sound = pygame.mixer.Sound(os.path.join(SOUNDS_DIR, "locked.wav"))
 
 def play_searching():
-    if not searching_sound.get_num_channels():
-        searching_sound.play(loops=-1)
+    pass
 
 def play_locked():
     searching_sound.stop()
