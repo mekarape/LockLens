@@ -30,21 +30,23 @@ frame_lock = threading.Lock()
 def inference_loop():
     global target, running, latest_result, frame_count, total_cost, latest_frame
     while True:
+        # always capture frame for live camera preview
+        frame = camera.capture_array()
+        img = Image.fromarray(frame)
+        with frame_lock:
+            latest_frame = img.copy()
+
         # idle until user sets a target and hits start
         if not running or not target:
             time.sleep(0.1)
             continue
-        # capture frame
-        frame = camera.capture_array()
-        img = Image.fromarray(frame)
+
+        # save frame and send to AMD
         buf = io.BytesIO()
         img.save(buf, format="JPEG")
         buf.seek(0)
         with open("current.jpg", "wb") as f:
             f.write(buf.read())
-        with frame_lock:
-            latest_frame = img.copy()
-        # send to AMD
         start = time.time()
         results = get_target_location("current.jpg", target)
         latency = int((time.time() - start) * 1000)
@@ -59,7 +61,10 @@ class LockLensApp:
         self.root = root
         self.root.title("LockLens")
         self.root.configure(bg="#0D1117")
+        self.root.geometry("800x480")
+        self.root.overrideredirect(True)
         self.root.attributes("-fullscreen", True)
+        self.root.update()
         self.root.bind("<Escape>", lambda e: self.stop_and_quit())
 
         # colors
@@ -186,27 +191,26 @@ class LockLensApp:
             frame = latest_frame.copy() if latest_frame else None
 
         if frame:
-            w = self.canvas.winfo_width()
-            h = self.canvas.winfo_height()
-            if w > 1 and h > 1:
-                frame = frame.resize((w, h))
-                # draw bounding box if target found
-                if latest_result.get("found"):
-                    draw = ImageDraw.Draw(frame)
-                    cx = latest_result.get("cx", 0.5) * w
-                    cy = latest_result.get("cy", 0.5) * h
-                    bw = latest_result.get("w", 0.2) * w
-                    bh = latest_result.get("h", 0.3) * h
-                    x1 = cx - bw / 2
-                    y1 = cy - bh / 2
-                    x2 = cx + bw / 2
-                    y2 = cy + bh / 2
-                    draw.rectangle([x1, y1, x2, y2], outline="#FF375F", width=2)
-                    conf = int(latest_result.get("confidence", 0) * 100)
-                    draw.text((x1, y1 - 18), f"{target} · {conf}%", fill="#FF375F")
-                photo = ImageTk.PhotoImage(frame)
-                self.canvas.create_image(0, 0, anchor=tk.NW, image=photo)
-                self.canvas.image = photo
+            w = self.canvas.winfo_width() or 480
+            h = self.canvas.winfo_height() or 480
+            frame = frame.resize((w, h))
+            # draw bounding box if target found
+            if latest_result.get("found"):
+                draw = ImageDraw.Draw(frame)
+                cx = latest_result.get("cx", 0.5) * w
+                cy = latest_result.get("cy", 0.5) * h
+                bw = latest_result.get("w", 0.2) * w
+                bh = latest_result.get("h", 0.3) * h
+                x1 = cx - bw / 2
+                y1 = cy - bh / 2
+                x2 = cx + bw / 2
+                y2 = cy + bh / 2
+                draw.rectangle([x1, y1, x2, y2], outline="#FF375F", width=2)
+                conf = int(latest_result.get("confidence", 0) * 100)
+                draw.text((x1, y1 - 18), f"{target} · {conf}%", fill="#FF375F")
+            photo = ImageTk.PhotoImage(frame)
+            self.canvas.create_image(0, 0, anchor=tk.NW, image=photo)
+            self.canvas.image = photo
 
         # update metrics
         if latest_result.get("latency"):
