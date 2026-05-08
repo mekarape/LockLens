@@ -1,18 +1,19 @@
 from src.inference_client import get_target_location
 from src.motor_control import Motors
 from src.audio import play_searching, play_locked
-
 from picamera2 import Picamera2
 import asyncio
 import websockets
 import json
 import time
 import threading
+import subprocess
 
 # initialize hardware and shared state
 camera = Picamera2()
 camera.configure(camera.create_preview_configuration())
 camera.start()
+motors = Motors()
 
 # shared state between main loop and websocket handler
 # target is plain english description of what to follow
@@ -51,8 +52,16 @@ async def handler(websocket, path):
             target = command.replace("target:", "").strip()
             running = True
 
- # start tracking loop in background thread so it doesn't block websocket
 if __name__ == "__main__":
+    # launch dashboard in fullscreen kiosk mode
+    subprocess.Popen([
+        "chromium-browser",
+        "--kiosk",
+        "--no-sandbox",
+        "file:///home/mekarape/LockLens/dashboard.html"
+    ])
+
+    # start tracking loop in background thread so it doesn't block websocket
     loop_thread = threading.Thread(target=main_loop, daemon=True)
     loop_thread.start()
 
