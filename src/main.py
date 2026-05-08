@@ -8,6 +8,7 @@ import json
 import time
 import threading
 import subprocess
+import os
 
 # initialize hardware and shared state
 camera = Picamera2()
@@ -52,29 +53,32 @@ async def handler(websocket, path):
             target = command.replace("target:", "").strip()
             running = True
 
-if __name__ == "__main__":
+async def main():
     # launch dashboard in fullscreen kiosk mode
+    env = os.environ.copy()
+    env["DISPLAY"] = ":0"
     subprocess.Popen([
         "chromium",
         "--kiosk",
         "--no-sandbox",
         "file:///home/mekarape/LockLens/dashboard.html"
-    ])
+    ], env=env)
 
     # start tracking loop in background thread so it doesn't block websocket
     loop_thread = threading.Thread(target=main_loop, daemon=True)
     loop_thread.start()
 
     # start websocket server on localhost port 8765
-    start_server = websockets.serve(handler, "localhost", 8765)
-    asyncio.get_event_loop().run_until_complete(start_server)
+    async with websockets.serve(handler, "localhost", 8765):
+        try:
+            # run forever until Ctrl+C
+            await asyncio.Future()
+        except KeyboardInterrupt:
+            # clean shutdown — stop motors before closing
+            motors.stop()
+            motors.close()
+            camera.stop()
+            print("LockLens stopped")
 
-    try:
-        # run forever until Ctrl+C
-        asyncio.get_event_loop().run_forever()
-    except KeyboardInterrupt:
-        # clean shutdown — stop motors before closing
-        motors.stop()
-        motors.close()
-        camera.stop()
-        print("LockLens stopped")
+if __name__ == "__main__":
+    asyncio.run(main())
