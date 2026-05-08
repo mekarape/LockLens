@@ -16,9 +16,9 @@ class Motors:
         max_rpm=3000,
         left_multiplier=-1,
         right_multiplier=1,
-        kp=0.5,
-        base_speed=0.3,
-        search_speed=0.2,
+        kp=0.3,          # was 0.5 — less aggressive correction
+        base_speed=0.15, # was 0.3 — slower forward speed
+        search_speed=0.1, # was 0.2 — slower search rotation
     ):
         self.port = port
         self.baud = baud
@@ -42,6 +42,9 @@ class Motors:
         cx = result["cx"]
         self.last_cx = cx
         error = cx - 0.5
+        # deadband — ignore small errors to reduce jitter
+        if abs(error) < 0.1:
+            error = 0
         correction = error * self.kp
 
         # maintain ~2 foot standoff using bbox height as distance proxy
