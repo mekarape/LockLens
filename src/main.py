@@ -55,7 +55,7 @@ async def handler(websocket, path):
 if __name__ == "__main__":
     # launch dashboard in fullscreen kiosk mode
     subprocess.Popen([
-        "chromium-browser",
+        "chromium",
         "--kiosk",
         "--no-sandbox",
         "file:///home/mekarape/LockLens/dashboard.html"
