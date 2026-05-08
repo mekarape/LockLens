@@ -27,23 +27,30 @@ frame_lock = threading.Lock()
 # runs continuously in a background thread
 # captures frames and sends to AMD cloud for inference
 # passes results to motor controller every cycle
-def inference_loop():
-    global target, running, latest_result, frame_count, total_cost, latest_frame
+
+# separate camera capture thread — runs at full speed for live preview
+def camera_loop():
+    global latest_frame
     while True:
-        # always capture frame for live camera preview
         frame = camera.capture_array()
         img = Image.fromarray(frame).convert("RGB")
         with frame_lock:
             latest_frame = img.copy()
+        time.sleep(0.033)  # ~30fps preview
 
-        # idle until user sets a target and hits start
+# inference thread — runs slower, sends to AMD
+def inference_loop():
+    global target, running, latest_result, frame_count, total_cost
+    while True:
         if not running or not target:
             time.sleep(0.1)
             continue
-
-        # save frame and send to AMD
+        with frame_lock:
+            frame = latest_frame.copy() if latest_frame else None
+        if frame is None:
+            continue
         buf = io.BytesIO()
-        img.save(buf, format="JPEG")
+        frame.save(buf, format="JPEG")
         buf.seek(0)
         with open("current.jpg", "wb") as f:
             f.write(buf.read())
@@ -55,7 +62,7 @@ def inference_loop():
         frame_count += 1
         total_cost += 0.001
         motors.track(results)
-        time.sleep(0.5)  # wait 500ms between inference calls
+        time.sleep(0.3)
 
 class LockLensApp:
     def __init__(self, root):
@@ -231,6 +238,9 @@ class LockLensApp:
 
 if __name__ == "__main__":
     # start inference loop in background thread
+    camera_thread = threading.Thread(target=camera_loop, daemon=True)
+    camera_thread.start()
+
     inference_thread = threading.Thread(target=inference_loop, daemon=True)
     inference_thread.start()
 

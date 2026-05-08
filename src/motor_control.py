@@ -17,10 +17,10 @@ class Motors:
         left_multiplier=1,
         right_multiplier=-1,
         kp=0.4,
-        base_speed=0.35,
+        base_speed=0.28,
         search_speed=0.2,
-        kickstart_rpm=2000,
-        kickstart_duration=0.15,
+        kickstart_rpm=1800,
+        kickstart_duration=0.1,
     ):
         self.port = port
         self.baud = baud
@@ -43,7 +43,7 @@ class Motors:
     def track(self, result):
         print(f"track called: found={result.get('found')}, confidence={result.get('confidence', 0):.2f}, cx={result.get('cx', 'N/A')}")
         
-        if not result["found"] or result.get("confidence", 0) < 0.5:
+        if not result["found"]:
             self.was_stopped = True
             self.search()
             return
