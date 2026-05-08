@@ -16,7 +16,7 @@ class Motors:
         max_rpm=4000,
         left_multiplier=-1,
         right_multiplier=1,
-        kp=0.4,
+        kp=0.15,
         base_speed=0.35,
         search_speed=0.15,
     ):
@@ -47,7 +47,7 @@ class Motors:
         # camera offset calibrated to 0.18
         error = cx - 0.18
         # deadband — ignore small errors to reduce jitter
-        if abs(error) < 0.08:
+        if abs(error) < 0.2:
             error = 0
         correction = error * self.kp
 
