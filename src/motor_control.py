@@ -16,9 +16,9 @@ class Motors:
         max_rpm=3000,
         left_multiplier=-1,
         right_multiplier=1,
-        kp=0.3,          # was 0.5 — less aggressive correction
-        base_speed=0.15, # was 0.3 — slower forward speed
-        search_speed=0.1, # was 0.2 — slower search rotation
+        kp=0.3,
+        base_speed=0.15,
+        search_speed=0.1,
     ):
         self.port = port
         self.baud = baud
@@ -48,9 +48,9 @@ class Motors:
         correction = error * self.kp
 
         # maintain ~2 foot standoff using bbox height as distance proxy
-        # tune 0.35 up to get closer, down to stay further away
+        # tune 0.6 up to get closer, down to stay further away
         bh = result.get("h", 0)
-        if bh > 0.35:
+        if bh > 0.6:
             base_speed = 0
         else:
             base_speed = self.base_speed
@@ -96,6 +96,7 @@ class Motors:
             time.sleep(0.05)
         finally:
             self.ser.close()
+
     def set_speed(self, left_speed, right_speed):
         # set motor speeds directly in range -1.0 to 1.0
         left_rpm = int(left_speed * self.max_rpm * self.left_multiplier)
