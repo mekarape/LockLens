@@ -2,83 +2,243 @@ from src.inference_client import get_target_location
 from src.motor_control import Motors
 from src.audio import play_searching, play_locked
 from picamera2 import Picamera2
-import asyncio
-import websockets
-import json
+from PIL import Image, ImageTk, ImageDraw, ImageFont
+import tkinter as tk
 import time
 import threading
-import subprocess
+import io
 import os
 
 # initialize hardware and shared state
 camera = Picamera2()
-camera.configure(camera.create_preview_configuration())
+camera.configure(camera.create_preview_configuration(main={"size": (640, 480)}))
 camera.start()
 motors = Motors()
 
-# shared state between main loop and websocket handler
-# target is plain english description of what to follow
+# shared state between UI and inference loop
 target = ""
 running = False
+latest_result = {"found": False}
+frame_count = 0
+total_cost = 0.0
+latest_frame = None
+frame_lock = threading.Lock()
 
 # runs continuously in a background thread
 # captures frames and sends to AMD cloud for inference
 # passes results to motor controller every cycle
-def main_loop():
+def inference_loop():
+    global target, running, latest_result, frame_count, total_cost, latest_frame
     while True:
         # idle until user sets a target and hits start
         if not running or not target:
             time.sleep(0.1)
             continue
-        image_path = "current.jpg"
-        camera.capture_file(image_path)
-        results = get_target_location(image_path, target)
+        # capture frame
+        frame = camera.capture_array()
+        img = Image.fromarray(frame)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        buf.seek(0)
+        with open("current.jpg", "wb") as f:
+            f.write(buf.read())
+        with frame_lock:
+            latest_frame = img.copy()
+        # send to AMD
+        start = time.time()
+        results = get_target_location("current.jpg", target)
+        latency = int((time.time() - start) * 1000)
+        latest_result = results
+        latest_result["latency"] = latency
+        frame_count += 1
+        total_cost += 0.001
         motors.track(results)
 
-# handles incoming websocket messages from dashboard.html
-# commands: start, stop, target:<new target>
-async def handler(websocket):
-    global target, running
-    async for message in websocket:
-        data = json.loads(message)
-        command = data.get("command", "")
-        if command == "start":
+class LockLensApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("LockLens")
+        self.root.configure(bg="#0D1117")
+        self.root.attributes("-fullscreen", True)
+        self.root.bind("<Escape>", lambda e: self.stop_and_quit())
+
+        # colors
+        self.pink = "#FF375F"
+        self.navy = "#0D1117"
+        self.card = "#161D2A"
+        self.muted = "#3A4A60"
+        self.white = "#FFFFFF"
+
+        self.build_ui()
+        self.update_ui()
+
+    def build_ui(self):
+        # main layout — left camera, right panel
+        self.left = tk.Frame(self.root, bg=self.navy)
+        self.left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.right = tk.Frame(self.root, bg=self.navy, width=240)
+        self.right.pack(side=tk.RIGHT, fill=tk.Y)
+        self.right.pack_propagate(False)
+
+        # camera canvas
+        self.canvas = tk.Canvas(self.left, bg="#111820", highlightthickness=0)
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+
+        # logo
+        logo_frame = tk.Frame(self.right, bg=self.navy)
+        logo_frame.pack(fill=tk.X, padx=14, pady=(14, 0))
+        tk.Label(logo_frame, text="⬤", fg=self.pink, bg=self.navy, font=("Arial", 8)).pack(side=tk.LEFT)
+        tk.Label(logo_frame, text=" LockLens", fg=self.white, bg=self.navy, font=("Arial", 13, "bold")).pack(side=tk.LEFT)
+
+        # status pill
+        self.status_var = tk.StringVar(value="ready")
+        self.status_label = tk.Label(self.right, textvariable=self.status_var,
+            fg=self.pink, bg=self.card, font=("Arial", 9, "bold"),
+            padx=10, pady=4)
+        self.status_label.pack(fill=tk.X, padx=14, pady=(8, 0))
+
+        # metrics frame
+        metrics = tk.Frame(self.right, bg=self.navy)
+        metrics.pack(fill=tk.X, padx=14, pady=(8, 0))
+
+        self.latency_var = tk.StringVar(value="--")
+        self.conf_var = tk.StringVar(value="--")
+        self.frames_var = tk.StringVar(value="0")
+        self.cost_var = tk.StringVar(value="0.000")
+
+        self.make_metric(metrics, "LATENCY", self.latency_var, "ms", 0, 0)
+        self.make_metric(metrics, "CONFIDENCE", self.conf_var, "%", 0, 1)
+        self.make_metric(metrics, "FRAMES", self.frames_var, "", 1, 0)
+        self.make_metric(metrics, "COST", self.cost_var, "$", 1, 1)
+
+        # target input
+        target_card = tk.Frame(self.right, bg=self.card)
+        target_card.pack(fill=tk.X, padx=14, pady=(8, 0))
+        tk.Label(target_card, text="TRACKING TARGET", fg=self.muted,
+            bg=self.card, font=("Arial", 8)).pack(anchor=tk.W, padx=8, pady=(6, 0))
+        self.target_display = tk.Label(target_card, text='"--"', fg=self.white,
+            bg=self.card, font=("Arial", 11))
+        self.target_display.pack(anchor=tk.W, padx=8)
+        self.target_entry = tk.Entry(target_card, bg="#0D1117", fg=self.white,
+            insertbackground=self.white, font=("Arial", 10), relief=tk.FLAT,
+            highlightthickness=1, highlightcolor=self.pink)
+        self.target_entry.pack(fill=tk.X, padx=8, pady=(4, 8))
+        self.target_entry.bind("<Return>", self.change_target)
+        self.target_entry.insert(0, "describe target...")
+        self.target_entry.bind("<FocusIn>", lambda e: self.target_entry.delete(0, tk.END))
+
+        # buttons
+        btn_frame = tk.Frame(self.right, bg=self.navy)
+        btn_frame.pack(fill=tk.X, padx=14, pady=(8, 0))
+        tk.Button(btn_frame, text="START", bg=self.pink, fg=self.white,
+            font=("Arial", 11, "bold"), relief=tk.FLAT, padx=0, pady=10,
+            command=self.start_tracking).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        tk.Button(btn_frame, text="STOP", bg=self.card, fg=self.pink,
+            font=("Arial", 11, "bold"), relief=tk.FLAT, padx=0, pady=10,
+            command=self.stop_tracking).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # amd badge
+        tk.Label(self.right, text="AMD MI300X · ROCm 7.2 · vLLM",
+            fg=self.muted, bg=self.navy, font=("Arial", 8)).pack(side=tk.BOTTOM, pady=8)
+
+    def make_metric(self, parent, label, var, unit, row, col):
+        frame = tk.Frame(parent, bg=self.card)
+        frame.grid(row=row, column=col, padx=3, pady=3, sticky="nsew")
+        parent.columnconfigure(col, weight=1)
+        tk.Label(frame, text=label, fg=self.muted, bg=self.card,
+            font=("Arial", 8)).pack(anchor=tk.W, padx=8, pady=(6, 0))
+        tk.Label(frame, textvariable=var, fg=self.pink, bg=self.card,
+            font=("Courier", 16, "bold")).pack(anchor=tk.W, padx=8, pady=(0, 6))
+
+    def change_target(self, event=None):
+        global target, running
+        val = self.target_entry.get().strip()
+        if val and val != "describe target...":
+            target = val
             running = True
-        # stop motors immediately and pause inference loop
-        elif command == "stop":
-            running = False
-            motors.stop()
-        # update target and resume tracking immediately
-        elif command.startswith("target:"):
-            target = command.replace("target:", "").strip()
-            running = True
+            self.target_display.config(text=f'"{val}"')
+            self.target_entry.delete(0, tk.END)
+            self.status_var.set("tracking")
 
-async def main():
-    # launch dashboard in fullscreen kiosk mode
-    env = os.environ.copy()
-    env["DISPLAY"] = ":0"
-    subprocess.Popen([
-        "chromium",
-        "--kiosk",
-        "--no-sandbox",
-        "file:///home/mekarape/LockLens/dashboard.html"
-    ], env=env)
+    def start_tracking(self):
+        global running
+        running = True
+        self.status_var.set("tracking")
 
-    # start tracking loop in background thread so it doesn't block websocket
-    loop_thread = threading.Thread(target=main_loop, daemon=True)
-    loop_thread.start()
+    def stop_tracking(self):
+        global running
+        running = False
+        motors.stop()
+        self.status_var.set("stopped")
 
-    # start websocket server on localhost port 8765
-    async with websockets.serve(handler, "localhost", 8765):
-        try:
-            # run forever until Ctrl+C
-            await asyncio.Future()
-        except KeyboardInterrupt:
-            # clean shutdown — stop motors before closing
-            motors.stop()
-            motors.close()
-            camera.stop()
-            print("LockLens stopped")
+    def stop_and_quit(self):
+        global running
+        running = False
+        motors.stop()
+        motors.close()
+        camera.stop()
+        self.root.destroy()
+
+    def update_ui(self):
+        # update camera feed
+        with frame_lock:
+            frame = latest_frame.copy() if latest_frame else None
+
+        if frame:
+            w = self.canvas.winfo_width()
+            h = self.canvas.winfo_height()
+            if w > 1 and h > 1:
+                frame = frame.resize((w, h))
+                # draw bounding box if target found
+                if latest_result.get("found"):
+                    draw = ImageDraw.Draw(frame)
+                    cx = latest_result.get("cx", 0.5) * w
+                    cy = latest_result.get("cy", 0.5) * h
+                    bw = latest_result.get("w", 0.2) * w
+                    bh = latest_result.get("h", 0.3) * h
+                    x1 = cx - bw / 2
+                    y1 = cy - bh / 2
+                    x2 = cx + bw / 2
+                    y2 = cy + bh / 2
+                    draw.rectangle([x1, y1, x2, y2], outline="#FF375F", width=2)
+                    conf = int(latest_result.get("confidence", 0) * 100)
+                    draw.text((x1, y1 - 18), f"{target} · {conf}%", fill="#FF375F")
+                photo = ImageTk.PhotoImage(frame)
+                self.canvas.create_image(0, 0, anchor=tk.NW, image=photo)
+                self.canvas.image = photo
+
+        # update metrics
+        if latest_result.get("latency"):
+            self.latency_var.set(str(latest_result["latency"]))
+        if latest_result.get("confidence"):
+            self.conf_var.set(str(int(latest_result["confidence"] * 100)))
+        self.frames_var.set(str(frame_count))
+        self.cost_var.set(f"${total_cost:.3f}")
+
+        # update status color
+        status = self.status_var.get()
+        colors = {"tracking": "#FF375F", "searching": "#BF9FFF", "stopped": "#9FE0FF", "ready": "#BDC8E0"}
+        self.status_label.config(fg=colors.get(status, "#BDC8E0"))
+
+        # schedule next update
+        self.root.after(100, self.update_ui)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # start inference loop in background thread
+    inference_thread = threading.Thread(target=inference_loop, daemon=True)
+    inference_thread.start()
+
+    # launch tkinter UI on main thread
+    root = tk.Tk()
+    app = LockLensApp(root)
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        running = False
+        motors.stop()
+        motors.close()
+        camera.stop()
+        print("LockLens stopped")
