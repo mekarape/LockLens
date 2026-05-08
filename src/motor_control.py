@@ -6,7 +6,7 @@ from src.audio import play_searching
 
 class Motors:
     # left motor on UART, right motor on CAN bus (slave ID 88)
-    # left_multiplier and right_multiplier flipped from default to correct wheel direction
+    # left_multiplier and right_multiplier set for correct forward direction
     # kp and base_speed are tunable variables
     def __init__(
         self,
@@ -14,11 +14,11 @@ class Motors:
         baud=115200,
         slave_can_id=88,
         max_rpm=3000,
-        left_multiplier=-1,
-        right_multiplier=1,
-        kp=0.3,
-        base_speed=0.15,
-        search_speed=0.1,
+        left_multiplier=1,
+        right_multiplier=-1,
+        kp=0.5,
+        base_speed=0.5,
+        search_speed=0.3,
     ):
         self.port = port
         self.baud = baud
