@@ -36,7 +36,7 @@ class Motors:
     # error > 0 --> target is right of center, correction turns wagon right
     # error < 0 --> target is left of center, correction turns wagon left
     def track(self, result):
-        if not result["found"] or result["confidence"] < 0.5:
+        if not result["found"] or result.get("confidence", 0) < 0.5:
             self.search()
             return
         cx = result["cx"]
