@@ -41,7 +41,7 @@ class Motors:
             return
         cx = result["cx"]
         self.last_cx = cx
-        error = cx - 0.5
+        error = cx - 0.18
         # deadband — ignore small errors to reduce jitter
         if abs(error) < 0.1:
             error = 0
