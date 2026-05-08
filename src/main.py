@@ -32,7 +32,7 @@ def inference_loop():
     while True:
         # always capture frame for live camera preview
         frame = camera.capture_array()
-        img = Image.fromarray(frame)
+        img = Image.fromarray(frame).convert("RGB")
         with frame_lock:
             latest_frame = img.copy()
 
