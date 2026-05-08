@@ -30,7 +30,7 @@ def package_request(image_path, target):
                     },
                     {
                         "type": "text",
-                        "text": f'Locate the {target} in this image. Return ONLY valid JSON: {{"found": true, "cx": 0.5, "cy": 0.5, "w": 0.2, "h": 0.3, "confidence": 0.94}} or {{"found": false}}'
+                        "text": f'Look at this image and find the {target}. If you can see it, respond with ONLY this JSON: {{"found": true, "cx": 0.5, "cy": 0.5, "w": 0.2, "h": 0.3, "confidence": 0.9}} where cx and cy are the center coordinates normalized 0 to 1, w and h are the width and height normalized 0 to 1. If you cannot see a {target}, respond with ONLY: {{"found": false}}'
                     }
                 ]
             }
