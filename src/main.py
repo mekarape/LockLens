@@ -37,7 +37,7 @@ def main_loop():
 
 # handles incoming websocket messages from dashboard.html
 # commands: start, stop, target:<new target>
-async def handler(websocket, path):
+async def handler(websocket):
     global target, running
     async for message in websocket:
         data = json.loads(message)
