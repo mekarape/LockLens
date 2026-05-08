@@ -242,7 +242,13 @@ if __name__ == "__main__":
         pass
     finally:
         running = False
-        motors.stop()
-        motors.close()
-        camera.stop()
+        try:
+            motors.stop()
+            motors.close()
+        except Exception:
+            pass
+        try:
+            camera.stop()
+        except Exception:
+            pass
         print("LockLens stopped")
