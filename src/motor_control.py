@@ -43,8 +43,17 @@ class Motors:
         self.last_cx = cx
         error = cx - 0.5
         correction = error * self.kp
-        left_speed = self.base_speed + correction
-        right_speed = self.base_speed - correction
+
+        # maintain ~2 foot standoff using bbox height as distance proxy
+        # tune 0.35 up to get closer, down to stay further away
+        bh = result.get("h", 0)
+        if bh > 0.35:
+            base_speed = 0
+        else:
+            base_speed = self.base_speed
+
+        left_speed = base_speed + correction
+        right_speed = base_speed - correction
         left_rpm = int(left_speed * self.max_rpm * self.left_multiplier)
         right_rpm = int(right_speed * self.max_rpm * self.right_multiplier)
         self._send(SetRPM(left_rpm))
