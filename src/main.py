@@ -55,6 +55,7 @@ def inference_loop():
         frame_count += 1
         total_cost += 0.001
         motors.track(results)
+        time.sleep(0.5)  # wait 500ms between inference calls
 
 class LockLensApp:
     def __init__(self, root):

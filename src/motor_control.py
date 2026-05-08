@@ -16,9 +16,11 @@ class Motors:
         max_rpm=3000,
         left_multiplier=1,
         right_multiplier=-1,
-        kp=0.5,
-        base_speed=0.5,
-        search_speed=0.3,
+        kp=0.4,
+        base_speed=0.35,
+        search_speed=0.2,
+        kickstart_rpm=2000,
+        kickstart_duration=0.15,
     ):
         self.port = port
         self.baud = baud
@@ -29,31 +31,52 @@ class Motors:
         self.kp = kp
         self.base_speed = base_speed
         self.search_speed = search_speed
+        self.kickstart_rpm = kickstart_rpm
+        self.kickstart_duration = kickstart_duration
         self.ser = serial.Serial(self.port, self.baud, timeout=0.1)
-        self.last_cx = 0.5
+        self.last_cx = 0.18
+        self.was_stopped = True  # track if motors were stopped last cycle
 
     # proportional control converts target position to motor speeds
     # error > 0 --> target is right of center, correction turns wagon right
     # error < 0 --> target is left of center, correction turns wagon left
     def track(self, result):
+        print(f"track called: found={result.get('found')}, confidence={result.get('confidence', 0):.2f}, cx={result.get('cx', 'N/A')}")
+        
         if not result["found"] or result.get("confidence", 0) < 0.5:
+            self.was_stopped = True
             self.search()
             return
+
         cx = result["cx"]
         self.last_cx = cx
+        # camera offset calibrated to 0.18
         error = cx - 0.18
         # deadband — ignore small errors to reduce jitter
-        if abs(error) < 0.1:
+        if abs(error) < 0.08:
             error = 0
         correction = error * self.kp
 
         # maintain ~2 foot standoff using bbox height as distance proxy
-        # tune 0.6 up to get closer, down to stay further away
         bh = result.get("h", 0)
         if bh > 0.6:
             base_speed = 0
+            self.was_stopped = True
         else:
             base_speed = self.base_speed
+
+        if base_speed == 0:
+            self.stop()
+            return
+
+        # kickstart — brief high torque pulse if motors were stopped
+        if self.was_stopped and base_speed > 0:
+            left_kick = int(self.kickstart_rpm * self.left_multiplier)
+            right_kick = int(self.kickstart_rpm * self.right_multiplier)
+            self._send(SetRPM(left_kick))
+            self._send(SetRPM(right_kick, can_id=self.slave_can_id))
+            time.sleep(self.kickstart_duration)
+            self.was_stopped = False
 
         left_speed = base_speed + correction
         right_speed = base_speed - correction
@@ -67,7 +90,7 @@ class Motors:
     # rotates then returns to let main loop recheck for target
     def search(self):
         play_searching()
-        if self.last_cx >= 0.5:
+        if self.last_cx >= 0.18:
             left_rpm = int(self.search_speed * self.max_rpm * self.left_multiplier)
             right_rpm = int(-self.search_speed * self.max_rpm * self.right_multiplier)
         else:
