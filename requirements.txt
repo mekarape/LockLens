@@ -5,5 +5,4 @@ pygame
 websockets
 python-dotenv
 requests
-
-
+Pillow
