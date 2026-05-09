@@ -16,15 +16,9 @@ LockLens replaces all of that with open-vocabulary AI vision running on AMD hard
 
 ## What It Is
 
-LockLens is a pay-per-inference AI vision platform that enables any Linux-based robot to follow a target specified in plain English. A user types "follow the person wearing a blue jacket" on a touchscreen and the system locks on, follows in real time, and carries your belongings with it. No physical markers required.
+LockLens is a pay-per-inference AI vision platform that enables any Linux-based robot to follow a target specified in plain English. A user types a target description on a touchscreen and the system locks on, follows in real time, and carries your belongings with it. No physical markers required.
 
 The reference implementation runs on a custom hoverboard conversion platform with 8.5 inch hub motors, Flipsky VESC motor controllers, and a Raspberry Pi 4B. The same software stack is designed to deploy on any Linux device with a camera and a serial port.
-
----
-
-## Demo
-
-> Demo video coming soon!
 
 ---
 
@@ -47,7 +41,6 @@ The reference implementation runs on a custom hoverboard conversion platform wit
 ### Computing and Sensing
 - Raspberry Pi 4B (main compute)
 - Raspberry Pi Camera Module 3, 12MP IMX708, autofocus, CSI ribbon cable
-- 500mm shielded 22-to-15 pin FFC cable for signal integrity near motor EMI
 - 5 inch DSI touchscreen for live dashboard
 
 ### Audio and Lighting
@@ -63,6 +56,9 @@ The reference implementation runs on a custom hoverboard conversion platform wit
 - Raspberry Pi powered via dedicated USB-C buck converter (36V to 5V)
 - All grounds common through power distribution block
 
+### Custom Hardware
+- Custom PCB ADC (MCP3008 based) designed and soldered for analog sensor integration
+
 ---
 
 ## Software Stack
@@ -74,11 +70,10 @@ The reference implementation runs on a custom hoverboard conversion platform wit
 | GPU | AMD MI300X (192GB VRAM) via AMD Developer Cloud |
 | Camera | Picamera2 |
 | Motor control | pyvesc over UART/CAN |
-| Dashboard | HTML/CSS/JS in Chromium kiosk mode |
-| Dashboard comms | WebSocket (asyncio + websockets) |
+| Dashboard | Tkinter native desktop UI |
 | Audio | pygame.mixer |
 | Billing | X402 micropayment per inference call |
-| Language | Python 3.11 |
+| Language | Python 3.13 |
 
 ---
 
@@ -86,32 +81,37 @@ The reference implementation runs on a custom hoverboard conversion platform wit
 
 ```
 CSI Camera (Raspberry Pi 4B)
-        | JPEG frame captured every cycle
+        | JPEG frame captured every cycle via camera thread
 inference_client.py
         | base64 encoded frame + plain English target prompt
         | HTTP POST to AMD Developer Cloud
 Qwen2.5-VL on AMD MI300X GPU
-        | returns {found, cx, cy, confidence}
+        | returns {found, cx, cy, w, h, confidence}
 motor_control.py proportional controller
-        | error = cx - 0.5
+        | rolling average smoothing over last 6 frames
+        | error = smooth_cx - 0.18 (camera offset calibrated)
         | left_rpm = base + correction
         | right_rpm = base - correction
         | UART to master Flipsky VESC
         | CAN bus to slave Flipsky VESC
 Hub motors drive wagon toward target
         |
-dashboard.html updates via WebSocket
-        | live: status, latency, confidence, cost, bounding box
+Tkinter dashboard updates every 100ms
+        | live: status, latency, confidence, cost, bounding box overlay
 X402 meters each inference call
 ```
 
 ### Search and Re-acquisition
 
-When the target is lost or confidence drops below 50%, the wagon stops forward motion and begins a slow rotation toward the last known position of the target. Audio feedback plays through the speaker during search. When the target is reacquired, a lock-on tone confirms tracking has resumed.
+When the target is lost the wagon begins a slow rotation toward the last known position of the target based on the stored cx value. When the target is reacquired a lock-on tone plays through the speaker confirming tracking has resumed.
 
 ### Target Switching
 
 The user can type a new target in plain English at any time via the touchscreen dashboard. The system immediately sends the new prompt with the next frame with no restart required.
+
+### Camera Offset Calibration
+
+The camera is physically offset from the wagon center. The center reference point is calibrated to cx 0.18 instead of 0.5 to compensate. A wide deadband of 0.25 prevents corrections for small positional noise.
 
 ---
 
@@ -122,12 +122,11 @@ locklens/
     src/
         inference_client.py   camera frame encoding, AMD HTTP, response parsing
         motor_control.py      PID controller, VESC UART/CAN, search behavior
-        audio.py              pygame sound playback
-        main.py               orchestrator, WebSocket server, main loop
+        audio.py              lock-on sound playback
+        main.py               orchestrator, camera thread, inference thread, Tkinter UI
     sounds/
-        searching.wav         plays during target search
-        locked.wav            plays on target reacquisition
-    dashboard.html            touchscreen UI, WebSocket client
+        locked.wav            plays on target acquisition
+    Makefile                  single command to run and record
     requirements.txt
     .env                      AMD endpoint (not committed)
 ```
@@ -139,7 +138,7 @@ locklens/
 ### Requirements
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt --break-system-packages
 ```
 
 ### Environment
@@ -155,33 +154,36 @@ AMD_ENDPOINT=http://YOUR_AMD_INSTANCE_IP:8000/v1/chat/completions
 1. Sign up for the AMD AI Developer Program at developer.amd.com
 2. Claim $100 in GPU credits
 3. Spin up an MI300X instance with the vLLM 0.17.1 image
-4. SSH in and start the inference server:
+4. SSH in, enter the Docker container, and start the inference server:
 
 ```bash
+ssh root@YOUR_AMD_IP
+docker exec -it rocm /bin/bash
 vllm serve Qwen/Qwen2.5-VL-7B-Instruct --host 0.0.0.0 --port 8000
+```
+
+5. Open port 8000 on the firewall in a second terminal:
+
+```bash
+ssh root@YOUR_AMD_IP
+ufw allow 8000
 ```
 
 ### Running LockLens
 
 ```bash
-python src/main.py
+make run
 ```
 
-Chromium will launch automatically in kiosk mode displaying the dashboard. Type a target on the touchscreen and tap Start.
+This starts the screen recorder and LockLens simultaneously. Press Ctrl+C to stop. The dashboard recording is saved to `dashboard_recording.mp4`.
 
-### Autostart on Boot
+Or run manually:
 
 ```bash
-mkdir -p ~/.config/autostart
-nano ~/.config/autostart/locklens.desktop
+DISPLAY=:0 PYTHONPATH=/home/mekarape/LockLens python3 src/main.py
 ```
 
-```
-[Desktop Entry]
-Type=Application
-Name=LockLens
-Exec=bash -c "python /home/pi/locklens/src/main.py & chromium-browser --kiosk /home/pi/locklens/dashboard.html"
-```
+Type a target description in the input field and press Enter to begin tracking.
 
 ---
 
@@ -189,11 +191,13 @@ Exec=bash -c "python /home/pi/locklens/src/main.py & chromium-browser --kiosk /h
 
 | Parameter | Default | Description |
 |---|---|---|
-| `kp` | 0.5 | Proportional gain, increase for faster response, decrease if oscillating |
-| `base_speed` | 0.3 | Forward tracking speed (0.0 to 1.0) |
-| `search_speed` | 0.2 | Rotation speed during target search |
-| `max_rpm` | 3000 | Maximum motor RPM |
-| Confidence threshold | 0.5 | Minimum confidence to track, below this triggers search |
+| `kp` | 0.08 | Proportional gain, increase for faster response, decrease if oscillating |
+| `base_speed` | 0.35 | Forward tracking speed (0.0 to 1.0) |
+| `search_speed` | 0.15 | Rotation speed during target search |
+| `max_rpm` | 4000 | Maximum motor RPM |
+| `cx_history_size` | 6 | Number of frames to average for smooth tracking |
+| Camera center offset | 0.18 | Calibrate to your camera position |
+| Standoff threshold | 0.6 | Bbox height at which wagon stops to maintain distance |
 
 ---
 
@@ -207,7 +211,8 @@ Target customers: robotics startups, university labs, warehouse automation teams
 
 ## Roadmap
 
-- VL53L0X ToF sensor integration for collision avoidance 
+- VL53L0X ToF sensor integration for collision avoidance (hardware already on platform)
+- Voice target input via Whisper on AMD GPU
 - Multi-camera support
 - Edge inference mode for low-latency offline operation
 - REST API for third-party robot integration
