@@ -103,7 +103,7 @@ X402 meters each inference call
 
 ### Search and Re-acquisition
 
-When the target is lost the wagon begins a slow rotation toward the last known position of the target based on the stored cx value. When the target is reacquired a lock-on tone plays through the speaker confirming tracking has resumed.
+When the target is lost the wagon stops and waits for the next inference cycle to reacquire. Target re-acquisition with directional search and audio feedback is planned for a future release.
 
 ### Target Switching
 
@@ -217,6 +217,8 @@ Target customers: robotics startups, university labs, warehouse automation teams
 - Edge inference mode for low-latency offline operation
 - REST API for third-party robot integration
 - Web dashboard for fleet management
+- Directional search rotation when target is lost
+- Audio lock-on confirmation tone
 
 ---
 
